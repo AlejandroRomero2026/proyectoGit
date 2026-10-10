@@ -1,0 +1,47 @@
+name: CI
+on:
+  pull_request:
+    branches: [develop]
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [develop]
+  workflow_dispatch:
+
+jobs:
+  update-readme:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Añadir línea de la feature al README
+        if: github.event_name == 'push'
+        run: |
+          MSG="$(git log -1 --pretty=%s)"
+          BRANCH="$(echo "$MSG" | sed -n 's#^Merge pull request .* from [^/]*/##p')"
+          if [ -z "$BRANCH" ]; then BRANCH="$GITHUB_REF_NAME"; fi
+          echo "Añadida feature: $BRANCH" >> README.md
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add README.md
+          git commit -m "Actualiza README con la feature $BRANCH"
+          git push
+      - name: Evento sin push
+        if: github.event_name != 'push'
+        run: echo "Evento ${{ github.event_name }}. El README solo se actualiza al hacer push a develop."
+
+  validate-dev:
+    needs: update-readme
+    runs-on: self-hosted
+    steps:
+      - name: Validar DEV_TOKEN
+        shell: powershell
+        env:
+          DEV_TOKEN: ${{ secrets.DEV_TOKEN }}
+        run: |
+          if ($env:DEV_TOKEN -eq $env:LOCAL_DEV_TOKEN) {
+            Write-Host "DEV_TOKEN valido: coincide con LOCAL_DEV_TOKEN"
+          } else {
+            Write-Host "DEV_TOKEN NO coincide con LOCAL_DEV_TOKEN"
+            exit 1
+          }
